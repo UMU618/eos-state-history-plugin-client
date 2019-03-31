@@ -13,6 +13,7 @@
 'use strict'
 
 let socketAddress
+let loop
 
 {
   const DEFAULT_ADDRESS = 'ws://localhost:8080'
@@ -21,15 +22,18 @@ let socketAddress
   po
     .version('0.1.0')
     .option('-a, --socket-address [address]', 'Socket address', DEFAULT_ADDRESS)
+    .option('-l, --loop', 'Endless loop, per 500ms', false)
     .parse(process.argv)
 
   if (!po.socketAddress) {
     po.outputHelp()
     process.exit(-1)
   }
-
-  console.log('Socket address: ' + po.socketAddress)
   socketAddress = po.socketAddress
+  loop = !!po.loop
+
+  console.log('Socket address: ' + socketAddress)
+  console.log('Endless loop: ' + loop)
 }
 
 const WebSocket = require('ws')
@@ -54,7 +58,7 @@ ws.on('message', async function message(data) {
       , serverABI)
     //console.log('request:', serverTypes.get('request'))
 
-    setInterval(() => {
+    let getStatus = () => {
       const buffer = new Serialize.SerialBuffer({
         textEncoder: new TextEncoder(),
         textDecoder: new TextDecoder(),
@@ -63,7 +67,13 @@ ws.on('message', async function message(data) {
       serverTypes.get('request').serialize(buffer, ['get_status_request_v0', {}]
         )
       ws.send(buffer.asUint8Array())
-    }, 500);
+    }
+
+    if (loop) {
+      setInterval(getStatus, 500)
+    } else {
+      getStatus()
+    }
   } else {
     const buffer = new Serialize.SerialBuffer({
       textEncoder: new TextEncoder(),
@@ -72,5 +82,9 @@ ws.on('message', async function message(data) {
     })
     const realData = serverTypes.get('result').deserialize(buffer)
     console.log(realData)
+
+    if (!loop) {
+      ws.close()
+    }
   }
 })
